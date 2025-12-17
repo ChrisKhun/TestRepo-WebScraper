@@ -2,7 +2,7 @@
 
 A simple personal sandbox project for experimenting with retrieving LinkedIn profile data using the Unipile API.
 
-This is NOT a traditional HTML scraper. Unipile uses authenticated LinkedIn sessions and returns structured JSON data.
+https://developer.unipile.com/docs/api-usage
 
 ---
 
