@@ -1,4 +1,13 @@
-﻿using DotNetEnv;
+﻿// ============================================================================
+// Unipile API Connection Test
+// Author: Christopher Khun
+// Date: 12/17/25
+// 
+// Description:
+// Tests connection to Unipile API and retrieves connected account details.
+// Loads credentials from .env file
+// ============================================================================
+using DotNetEnv;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
