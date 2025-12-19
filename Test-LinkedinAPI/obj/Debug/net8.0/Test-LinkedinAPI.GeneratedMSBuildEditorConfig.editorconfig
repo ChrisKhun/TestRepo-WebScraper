@@ -8,6 +8,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = Test_LinkedinAPI
-build_property.ProjectDir = F:\TestRepo-Linkedin\Test-LinkedinAPI\
+build_property.ProjectDir = C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 

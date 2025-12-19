@@ -35,3 +35,10 @@ F:\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Microsoft.Extensions.Prim
 F:\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Sprache.dll
 F:\TestRepo-Linkedin\Test-LinkedinAPI\obj\Debug\net8.0\Test-LinkedinAPI.csproj.AssemblyReference.cache
 F:\TestRepo-Linkedin\Test-LinkedinAPI\obj\Debug\net8.0\Test-Lin.B2BD66D4.Up2Date
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\DotNetEnv.dll
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Microsoft.Extensions.Configuration.dll
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Microsoft.Extensions.Configuration.Abstractions.dll
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Microsoft.Extensions.Primitives.dll
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\bin\Debug\net8.0\Sprache.dll
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\obj\Debug\net8.0\Test-LinkedinAPI.csproj.AssemblyReference.cache
+C:\Users\mcjuk\OneDrive\Desktop\Personal\TestRepo-Linkedin\Test-LinkedinAPI\obj\Debug\net8.0\Test-Lin.B2BD66D4.Up2Date

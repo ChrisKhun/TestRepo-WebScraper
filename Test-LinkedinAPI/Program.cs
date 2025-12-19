@@ -5,28 +5,40 @@
 // 
 // Description:
 // Tests connection to Unipile API and retrieves connected account details.
-// Loads credentials from .env file
+// Loads credentials through API from .env file
 // ============================================================================
 using DotNetEnv;
 using System.Text.Json;
+
+
+// ============================================================================
+//                                    Setup
+// ============================================================================
 
 // Load .env from project root
 var projectRoot = FindProjectRoot();
 Env.Load(Path.Combine(projectRoot, ".env"));
 
+// gets key from .env and sets as string
 var dsn = Environment.GetEnvironmentVariable("UNIPILE_DSN")?.TrimEnd('/');
 var apiKey = Environment.GetEnvironmentVariable("UNIPILE_API_KEY");
 
 Console.WriteLine($"Testing connection to: {dsn}");
 
+// create new http client & give it header name
 using var http = new HttpClient();
 http.DefaultRequestHeaders.Add("X-API-KEY", apiKey);
 
+// ============================================================================
+//                                     Main
+// ============================================================================
 try
 {
+    // send and read response from unipile
     var response = await http.GetAsync($"{dsn}/api/v1/accounts");
     var body = await response.Content.ReadAsStringAsync();
 
+    
     if (response.IsSuccessStatusCode)
     {
         Console.WriteLine("API key is VALID");
@@ -36,6 +48,7 @@ try
 
         if (string.IsNullOrWhiteSpace(unipileAccountId))
         {
+            // exception check
             Console.WriteLine("Missing UNIPILE_ACCOUNT_ID in .env (needed for LinkedIn search).");
         }
         else
@@ -65,15 +78,20 @@ try
     }
     else
     {
+        // exception check
         Console.WriteLine($"API key is INVALID (HTTP {response.StatusCode})");
         Console.WriteLine($"Response: {body}");
     }
 }
 catch (Exception ex)
 {
+    // exception check
     Console.WriteLine($"Connection failed: {ex.Message}");
 }
 
+// ============================================================================
+//                            File Helper Function (to find .env)
+// ============================================================================
 static string FindProjectRoot()
 {
     var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -152,6 +170,7 @@ static async Task SearchLinkedInByUrl(HttpClient http, string dsn, string accoun
     }
     catch (Exception ex)
     {
+        // exception check
         Console.WriteLine($"Error running LinkedIn search: {ex.Message}");
     }
 }
