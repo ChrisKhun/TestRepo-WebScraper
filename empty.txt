@@ -1,173 +1,176 @@
-﻿using System.Net.Http.Headers;
+﻿// ============================================================================
+// Unipile API Connection Test
+// Author: Christopher Khun
+// Date: 12/17/25
+// 
+// Description:
+// Tests connection to Unipile API and retrieves connected account details.
+// Loads credentials through API from .env file
+// ============================================================================
 using DotNetEnv;
+using System.Text.Json;
 
-Console.WriteLine("Loading environment variables...");
 
-// 1) Find project root 
+// ============================================================================
+//                                    Setup
+// ============================================================================
+
+// Load .env from project root
 var projectRoot = FindProjectRoot();
-var envPath = Path.Combine(projectRoot, ".env");
+Env.Load(Path.Combine(projectRoot, ".env"));
 
-// 2) Load .env from the project root
-Console.WriteLine("Base directory: " + AppContext.BaseDirectory);
-Console.WriteLine("Project root:   " + projectRoot);
-Console.WriteLine(".env path:      " + envPath);
-Console.WriteLine(".env exists:    " + File.Exists(envPath));
+// gets key from .env and sets as string
+var dsn = Environment.GetEnvironmentVariable("UNIPILE_DSN")?.TrimEnd('/');
+var apiKey = Environment.GetEnvironmentVariable("UNIPILE_API_KEY");
 
-if (File.Exists(envPath))
+Console.WriteLine($"Testing connection to: {dsn}");
+
+// create new http client & give it header name
+using var http = new HttpClient();
+http.DefaultRequestHeaders.Add("X-API-KEY", apiKey);
+
+// ============================================================================
+//                                     Main
+// ============================================================================
+try
 {
-    try
+    // send and read response from unipile
+    var response = await http.GetAsync($"{dsn}/api/v1/accounts");
+    var body = await response.Content.ReadAsStringAsync();
+
+    
+    if (response.IsSuccessStatusCode)
     {
-        Env.Load(envPath);
-        Console.WriteLine("Loaded .env from project root");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"⚠Failed to load .env: {ex.Message}");
-    }
-}
-else
-{
-    Console.WriteLine("⚠.env not found in project root. Falling back to OS environment variables.");
-}
-
-// 3) Read env vars
-string unipileDsn = (Environment.GetEnvironmentVariable("UNIPILE_DSN") ?? "").Trim().TrimEnd('/');
-string unipileApiKey = (Environment.GetEnvironmentVariable("UNIPILE_API_KEY") ?? "").Trim();
-
-Console.WriteLine("UNIPILE_DSN loaded: " + !string.IsNullOrWhiteSpace(unipileDsn));
-Console.WriteLine("UNIPILE_API_KEY loaded: " + !string.IsNullOrWhiteSpace(unipileApiKey));
-
-if (string.IsNullOrWhiteSpace(unipileDsn) || string.IsNullOrWhiteSpace(unipileApiKey))
-{
-    Console.WriteLine("Config error: Missing UNIPILE_DSN or UNIPILE_API_KEY.");
-    Console.WriteLine("Create a .env in the SAME folder as your .csproj like:");
-    Console.WriteLine("UNIPILE_DSN=https://api21.unipile.com:15198");
-    Console.WriteLine("UNIPILE_API_KEY=[ENTER_REAL_KEY_HERE]");
-    Environment.Exit(1);
-}
-
-// 4) Validate DSN is a valid URL
-if (!Uri.TryCreate(unipileDsn, UriKind.Absolute, out var dsnUri) || 
-    (dsnUri.Scheme != "http" && dsnUri.Scheme != "https"))
-{
-    Console.WriteLine("UNIPILE_DSN must be a valid HTTP/HTTPS URL");
-    Environment.Exit(1);
-}
-
-// 5) Show sanitized credentials
-Console.WriteLine($"UNIPILE_DSN: {unipileDsn}");
-Console.WriteLine($"UNIPILE_API_KEY: {new string('*', Math.Min(unipileApiKey.Length, 8))}... (masked)");
-
-// 6) Verify key by calling Unipile with retry logic
-Console.WriteLine("Verifying Unipile API key...");
-var verified = await VerifyWithRetryAsync(unipileDsn, unipileApiKey);
-
-if (verified)
-{
-    Console.WriteLine("Unipile API key is VALID");
-}
-else
-{
-    Console.WriteLine("Unipile API key verification FAILED");
-    Environment.Exit(1);
-}
-
-Console.WriteLine("Done.");
-
-
-// ==================================================
-//                     HELPERS
-// ==================================================
-
-static string FindProjectRoot()
-{
-    // Start from where the EXE is running (bin/Debug/net8.0)
-    // Walk upward until we find a directory containing a *.csproj
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-
-    while (dir != null)
-    {
-        if (dir.GetFiles("*.csproj").Length > 0)
-            return dir.FullName;
-
-        dir = dir.Parent;
-    }
-
-    // Fallback: current directory 
-    return Directory.GetCurrentDirectory();
-}
-
-static async Task<bool> VerifyWithRetryAsync(string dsn, string apiKey, int maxRetries = 3)
-{
-    for (int attempt = 0; attempt < maxRetries; attempt++)
-    {
-        var (ok, statusCode, body, error) = await VerifyUnipileApiKeyAsync(dsn, apiKey);
+        Console.WriteLine("API key is VALID");
         
-        if (ok)
+        // Get search url details
+        var unipileAccountId = Environment.GetEnvironmentVariable("UNIPILE_ACCOUNT_ID");
+
+        if (string.IsNullOrWhiteSpace(unipileAccountId))
         {
-            Console.WriteLine($"Verified on attempt {attempt + 1} (HTTP {statusCode})");
-            Console.WriteLine("Response:");
-            Console.WriteLine(body);
-            return true;
-        }
-        
-        if (statusCode >= 500 || !string.IsNullOrWhiteSpace(error))
-        {
-            if (attempt < maxRetries - 1)
-            {
-                var delayMs = 1000 * (attempt + 1);
-                Console.WriteLine($"Attempt {attempt + 1} failed, retrying in {delayMs}ms...");
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    Console.WriteLine($"   Error: {error}");
-                }
-                else
-                {
-                    Console.WriteLine($"   HTTP {statusCode}");
-                }
-                await Task.Delay(delayMs);
-                continue;
-            }
-        }
-        
-        // 4xx errors or final attempt - don't retry
-        if (!string.IsNullOrWhiteSpace(error))
-        {
-            Console.WriteLine("Connection / request error:");
-            Console.WriteLine(error);
+            // exception check
+            Console.WriteLine("Missing UNIPILE_ACCOUNT_ID in .env (needed for LinkedIn search).");
         }
         else
         {
-            Console.WriteLine($"Unipile API key FAILED (HTTP {statusCode})");
-            Console.WriteLine("Response:");
-            Console.WriteLine(body);
+            // user input convert to url
+            Console.Write("Enter LinkedIn keyword: ");
+            Console.WriteLine("");
+            Console.WriteLine("");
+            var keywordsInput = Console.ReadLine();
+            
+            if (string.IsNullOrWhiteSpace(keywordsInput))
+            {
+                Console.WriteLine("No keywords entered.");
+                Environment.Exit(0);
+            }
+            else
+            {
+                // convert keywords to url
+                var encodedKeywords = Uri.EscapeDataString(keywordsInput.Trim());
+                
+                var linkedinSearchUrl = $"https://www.linkedin.com/search/results/people/?keywords={encodedKeywords}";
+                
+                await SearchLinkedInByUrl(http, dsn, unipileAccountId, linkedinSearchUrl);
+            }
         }
-        
-        return false;
+
     }
-    
-    return false;
+    else
+    {
+        // exception check
+        Console.WriteLine($"API key is INVALID (HTTP {response.StatusCode})");
+        Console.WriteLine($"Response: {body}");
+    }
+}
+catch (Exception ex)
+{
+    // exception check
+    Console.WriteLine($"Connection failed: {ex.Message}");
 }
 
-static async Task<(bool ok, int statusCode, string body, string error)> VerifyUnipileApiKeyAsync(string dsn, string apiKey)
+// ============================================================================
+//                            File Helper Function (to find .env)
+// ============================================================================
+static string FindProjectRoot()
 {
-    var url = $"{dsn}/api/v1/accounts";
+    var dir = new DirectoryInfo(AppContext.BaseDirectory);
+    while (dir != null && dir.GetFiles("*.csproj").Length == 0)
+        dir = dir.Parent;
+    return dir?.FullName ?? Directory.GetCurrentDirectory();
+}
 
+// ============================================================================
+//                             Search For Link By URL
+// ============================================================================
+
+static async Task SearchLinkedInByUrl(HttpClient http, string dsn, string accountId, string searchUrl)
+{
     try
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Add("X-API-KEY", apiKey);
+        var endpoint =
+            $"{dsn.TrimEnd('/')}/api/v1/linkedin/search" +
+            $"?account_id={Uri.EscapeDataString(accountId)}";
+        var payload = new { url = searchUrl };
 
-        var response = await http.SendAsync(request);
+        var json = JsonSerializer.Serialize(payload);
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        using var response = await http.PostAsync(endpoint, content);
         var body = await response.Content.ReadAsStringAsync();
 
-        return (response.IsSuccessStatusCode, (int)response.StatusCode, body, "");
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"LinkedIn search failed (HTTP {(int)response.StatusCode} {response.ReasonPhrase})");
+            Console.WriteLine($"Response: {body}");
+            return;
+        }
+
+        // if successful returns an object with array of results 
+        using var doc = JsonDocument.Parse(body);
+
+        if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            Console.WriteLine("LinkedIn search succeeded, but response didn't contain an 'items' array.");
+            Console.WriteLine($"Raw response: {body}");
+            return;
+        }
+
+        Console.WriteLine("\nLinkedIn Search Results:");
+        Console.WriteLine("------------------------");
+        Console.WriteLine($"Count: {items.GetArrayLength()}");
+        Console.WriteLine();
+
+        foreach (var item in items.EnumerateArray())
+        {
+            // type id name
+            var type = item.TryGetProperty("type", out var t) ? t.GetString() : "unknown";
+            var id = item.TryGetProperty("id", out var i) ? i.GetString() : null;
+            var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
+
+            // url
+            var profileUrl =
+                item.TryGetProperty("profile_url", out var p) ? p.GetString() :
+                item.TryGetProperty("url", out var u) ? u.GetString() :
+                null;
+
+            // headline 
+            var headline =
+                item.TryGetProperty("headline", out var h) ? h.GetString() :
+                item.TryGetProperty("title", out var tt) ? tt.GetString() :
+                null;
+
+            Console.WriteLine($"Type: {type}");
+            if (!string.IsNullOrWhiteSpace(id)) Console.WriteLine($"ID: {id}");
+            if (!string.IsNullOrWhiteSpace(name)) Console.WriteLine($"Name: {name}");
+            if (!string.IsNullOrWhiteSpace(headline)) Console.WriteLine($"Headline/Title: {headline}");
+            if (!string.IsNullOrWhiteSpace(profileUrl)) Console.WriteLine($"URL: {profileUrl}");
+            Console.WriteLine();
+        }
     }
     catch (Exception ex)
     {
-        return (false, 0, "", ex.Message);
+        // exception check
+        Console.WriteLine($"Error running LinkedIn search: {ex.Message}");
     }
 }

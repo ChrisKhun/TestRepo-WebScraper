@@ -7,6 +7,8 @@
 // Tests connection to Unipile API and retrieves connected account details.
 // Loads credentials through API from .env file
 // ============================================================================
+
+using System.Net;
 using DotNetEnv;
 using System.Text.Json;
 
@@ -53,26 +55,17 @@ try
         }
         else
         {
-            // user input convert to url
-            Console.Write("Enter LinkedIn keyword: ");
-            Console.WriteLine("");
-            Console.WriteLine("");
-            var keywordsInput = Console.ReadLine();
-            
-            if (string.IsNullOrWhiteSpace(keywordsInput))
+            Console.Write("Enter company name (ex: Pfizer): ");
+            var companyInput = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(companyInput))
             {
-                Console.WriteLine("No keywords entered.");
+                Console.WriteLine("No company entered.");
                 Environment.Exit(0);
             }
-            else
-            {
-                // convert keywords to url
-                var encodedKeywords = Uri.EscapeDataString(keywordsInput.Trim());
-                
-                var linkedinSearchUrl = $"https://www.linkedin.com/search/results/people/?keywords={encodedKeywords}";
-                
-                await SearchLinkedInByUrl(http, dsn, unipileAccountId, linkedinSearchUrl);
-            }
+
+            await SearchEmployeesByCompanyName(http, dsn, unipileAccountId, companyInput, topN: 10);
+
         }
 
     }
@@ -101,7 +94,99 @@ static string FindProjectRoot()
 }
 
 // ============================================================================
-//                             Search For Link By URL
+//                  Search For LinkedIn Company People By URL
+// ============================================================================
+
+static async Task<string?> GetCompanyIdFromName(HttpClient http, string dsn, string accountId, string companyName)
+{
+    var encoded = Uri.EscapeDataString(companyName.Trim());
+    var companySearchUrl = $"https://www.linkedin.com/search/results/companies/?keywords={encoded}";
+
+    var endpoint =
+        $"{dsn.TrimEnd('/')}/api/v1/linkedin/search" +
+        $"?account_id={Uri.EscapeDataString(accountId)}";
+
+    // packages object to send over to http
+    var payload = new { url = companySearchUrl };
+    var json = JsonSerializer.Serialize(payload);
+    using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+    // execute request & read response
+    using var response = await http.PostAsync(endpoint, content);
+    var body = await response.Content.ReadAsStringAsync();
+
+    if (!response.IsSuccessStatusCode)
+    {
+        Console.WriteLine($"Company search failed (HTTP {(int)response.StatusCode} {response.ReasonPhrase})");
+        Console.WriteLine($"Response: {body}");
+        return null;
+    }
+
+    // parse json response
+    using var doc = JsonDocument.Parse(body);
+
+    if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+    {
+        Console.WriteLine("Company search succeeded, but response didn't contain an 'items' array.");
+        return null;
+    }
+
+    // Print top 5 companies and auto-pick 1
+    Console.WriteLine("\nCompany Results:");
+    Console.WriteLine("----------------");
+    int shown = 0;
+
+    foreach (var item in items.EnumerateArray())
+    {
+        var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
+        var id = item.TryGetProperty("id", out var i) ? i.GetString() : null;
+        var url =
+            item.TryGetProperty("profile_url", out var p) ? p.GetString() :
+            item.TryGetProperty("url", out var u) ? u.GetString() :
+            null;
+
+        if (!string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(id))
+        {
+            Console.WriteLine($"[{shown + 1}] {name ?? "(no name)"}");
+            if (!string.IsNullOrWhiteSpace(id)) Console.WriteLine($"    ID: {id}");
+            if (!string.IsNullOrWhiteSpace(url)) Console.WriteLine($"    URL: {url}");
+            Console.WriteLine();
+            shown++;
+        }
+
+        if (shown >= 5) break;
+    }
+
+    // Pick the first company id
+    var first = items.GetArrayLength() > 0 ? items[0] : default;
+    if (first.ValueKind == JsonValueKind.Undefined) return null;
+
+    return first.TryGetProperty("id", out var firstId) ? firstId.GetString() : null;
+}
+
+
+static async Task SearchEmployeesByCompanyName(HttpClient http, string dsn, string accountId, string companyName, int topN = 10)
+{
+    var companyId = await GetCompanyIdFromName(http, dsn, accountId, companyName);
+
+    if (string.IsNullOrWhiteSpace(companyId))
+    {
+        Console.WriteLine("Could not determine company id from company search.");
+        return;
+    }
+
+    var encoded = Uri.EscapeDataString(companyName.Trim());
+
+    // currentCompany expects a JSON-like array in the URL
+    var employeesUrl =
+        $"https://www.linkedin.com/search/results/people/?keywords={encoded}" +
+        $"&currentCompany=%5B{Uri.EscapeDataString(companyId)}%5D";
+
+    await SearchLinkedInByUrl(http, dsn, accountId, employeesUrl);
+}
+
+// ============================================================================
+//                             Search For LinkIn By URL
 // ============================================================================
 
 static async Task SearchLinkedInByUrl(HttpClient http, string dsn, string accountId, string searchUrl)
