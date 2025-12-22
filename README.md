@@ -7,7 +7,10 @@ A simple personal project for experimenting with retrieving LinkedIn profile dat
 ## 📚 Documentation
 
 - https://developer.unipile.com/docs/linkedin  
-- https://developer.unipile.com/docs/linkedin-search  
+- https://developer.unipile.com/docs/linkedin-search
+- https://developer.unipile.com/reference/userscontroller_getprofilebyidentifier
+- https://developer.unipile.com/docs/provider-limits-and-restrictions
+- https://json2csharp.com/
 
 ---
 
