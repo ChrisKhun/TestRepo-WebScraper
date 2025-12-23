@@ -7,10 +7,9 @@
 // Tests connection to Unipile API and retrieves connected account details.
 // Loads credentials through API from .env file
 // ============================================================================
-
-using System.Net;
 using DotNetEnv;
 using System.Text.Json;
+
 // ============================================================================
 //                            File Helper Function (to find .env)
 // ============================================================================
@@ -181,7 +180,7 @@ static async Task SearchLinkedInByUrl(HttpClient http, string dsn, string accoun
             var json = JsonSerializer.Serialize(payload);
             using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            // sends http post request to server & wait for reponse
+            // sends http post request to server & wait for response
             using var response = await http.PostAsync(endpoint, content);
             var body = await response.Content.ReadAsStringAsync();
 
@@ -222,21 +221,39 @@ static async Task SearchLinkedInByUrl(HttpClient http, string dsn, string accoun
                     item.TryGetProperty("headline", out var h) ? h.GetString() :
                     item.TryGetProperty("title", out var tt) ? tt.GetString() :
                     null;
+                
+                // must have url
+                if (string.IsNullOrWhiteSpace(profileUrl))
+                    continue;
 
-                // checks if has url so its accessible
-                if (!string.IsNullOrWhiteSpace(profileUrl))
+                // keyword filter
+                if (keywords.Length > 0)
                 {
-                    // matches input with any keyword on profile
-                    if (keywords.Length > 0)
-                    {
-                        var text = $"{name} {headline}".ToLowerInvariant();
-                        bool matchesAny = keywords.Any(word => text.Contains(word));
-                        if (!matchesAny)
-                            continue;
-                    }
-                    profiles.Add(new LinkedInProfile(type, id, name, headline, profileUrl));
-                    pageAdded++;
+                    var text = $"{name} {headline}".ToLowerInvariant();
+                    if (!keywords.Any(word => text.Contains(word)))
+                        continue;
                 }
+                
+                // gets linkedin url from url
+                var identifier = ExtractLinkedInPublicIdentifier(profileUrl);
+                
+                string? email = null;
+                string? phone = null;
+
+                // best-effort contact fetch
+                if (!string.IsNullOrWhiteSpace(identifier))
+                {
+                    (email, phone) = await TryGetContactAsync(http, dsn, accountId, identifier);
+                }
+                
+                // prints to see if info found
+                Console.WriteLine(
+                    $"account_id={accountId} | identifier={identifier} | email={email ?? "null"} | phone={phone ?? "null"}"
+                );
+                
+                profiles.Add(new LinkedInProfile(type, id, name, headline, profileUrl, email, phone));
+                pageAdded++;
+
             }
             
             if (pageAdded == 0)
@@ -354,6 +371,82 @@ static async Task<string?> GetCompanyIdFromName(HttpClient http, string dsn, str
 }
 
 // ============================================================================
+//                   profile fetch helper 
+// ============================================================================
+static async Task<(string? Email, string? Phone)> TryGetContactAsync( HttpClient http, string dsn, string accountId, string identifier)
+{
+    // this pulls the full profile including contacts
+    var url =
+        $"{dsn.TrimEnd('/')}/api/v1/users/{Uri.EscapeDataString(identifier)}" +
+        $"?linkedin_sections=%2A&account_id={Uri.EscapeDataString(accountId)}";
+
+    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+    req.Headers.Accept.ParseAdd("application/json");
+
+    // delay
+    await Task.Delay(250);
+    using var resp = await http.SendAsync(req);
+    var body = await resp.Content.ReadAsStringAsync();
+
+    if (!resp.IsSuccessStatusCode)
+        return (null, null);
+
+    using var doc = JsonDocument.Parse(body);
+    var root = doc.RootElement;
+
+    string? FirstStringFromArray(JsonElement arr)
+    {
+        if (arr.ValueKind != JsonValueKind.Array) return null;
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+        return null;
+    }
+
+    string? email = null;
+    string? phone = null;
+
+    if (root.TryGetProperty("contact_info", out var contact) && contact.ValueKind == JsonValueKind.Object)
+    {
+        if (contact.TryGetProperty("emails", out var emails))
+            email = FirstStringFromArray(emails);
+
+        if (contact.TryGetProperty("phones", out var phones))
+            phone = FirstStringFromArray(phones);
+    }
+
+    return (email, phone);
+}
+
+// gets linkedin url from url
+static string? ExtractLinkedInPublicIdentifier(string? url)
+{
+    if (string.IsNullOrWhiteSpace(url))
+    {
+        return null;
+    }
+    try
+    {
+        var uri = new Uri(url);
+        var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        // ["in", "<slug>"]
+        if (parts.Length >= 2 && parts[0].Equals("in", StringComparison.OrdinalIgnoreCase))
+            return parts[1];
+
+        return null;
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+// ============================================================================
 //                              csv helper
 // ============================================================================
 
@@ -370,7 +463,7 @@ static async Task ExportProfilesToCsvAsync(
     string filePath)
 {
     var sb = new System.Text.StringBuilder();
-    sb.AppendLine("type,id,name,headline,url");
+    sb.AppendLine("type,id,name,headline,url,email,phone");
 
     foreach (var p in profiles)
     {
@@ -380,11 +473,13 @@ static async Task ExportProfilesToCsvAsync(
             .Append(CsvEscape(p.Id)).Append(',')
             .Append(CsvEscape(p.Name)).Append(',')
             .Append(CsvEscape(p.Headline)).Append(',')
-            .Append(CsvEscape(p.Url)).AppendLine();
+            .Append(CsvEscape(p.Url)).Append(',')
+            .Append(CsvEscape(p.Email)).Append(',')
+            .Append(CsvEscape(p.Phone)).AppendLine();
     }
 
     await File.WriteAllTextAsync(filePath, sb.ToString());
 }
 
-record LinkedInProfile( string? Type, string? Id, string? Name, string? Headline, string? Url );
+record LinkedInProfile(string? Type, string? Id, string? Name, string? Headline, string? Url, string? Email, string? Phone);
 
