@@ -196,8 +196,9 @@ public class UnipileApi : IDisposable
                         continue;
                     }
 
+                    // if found prints prf details w/ headline
                     Console.WriteLine(
-                        $"name={name ?? "null"} | company={company ?? "null"} | title={jobTitle ?? "null"} | " +
+                        $"name={name ?? "null"} | headline={headline ?? "null"} | company={company ?? "null"} | title={jobTitle ?? "null"} | " +
                         $"email={(hasEmail ? email : "null")} | phone={(hasPhone ? phone : "null")} | url={profileUrl}"
                     );
 
@@ -253,19 +254,19 @@ public class UnipileApi : IDisposable
     // ==================================================================
     public async Task<string?> GetCompanyIdFromNameAsync(string companyName)
     {
-        // 
+        // makes company name safe for URL use
         var encoded = Uri.EscapeDataString(companyName.Trim());
         var companySearchUrl = $"https://www.linkedin.com/search/results/companies/?keywords={encoded}";
         
-        // 
+        // builds api endpoint w/ acc id
         var endpoint = $"{_dsn}/api/v1/linkedin/search?account_id={Uri.EscapeDataString(_accountId)}";
         
-        // 
+        // packages search url in json
         var payload = new {url = companySearchUrl};
         var json = JsonSerializer.Serialize((payload));
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         
-        // 
+        // sends request & read repsonse
         using var response = await _http.PostAsync(endpoint, content);
         var body = await response.Content.ReadAsStringAsync();
         
@@ -277,7 +278,7 @@ public class UnipileApi : IDisposable
             return null;
         }
         
-        // 
+        // verify if array exists
         using var doc = JsonDocument.Parse(body);
         if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
         {
@@ -307,7 +308,7 @@ public class UnipileApi : IDisposable
             if (shown >= 1) break;
         }
 
-        // 
+        // get first company's id
         var first = items.GetArrayLength() > 0 ? items[0] : default;
         if (first.ValueKind == JsonValueKind.Undefined) return null;
 
@@ -319,28 +320,28 @@ public class UnipileApi : IDisposable
     // ==================================================================
      public async Task<ProfileData> GetContactInfoAsync(string identifier)
     {
-        // 
+        // builds profile fetch url with identifier
         var url = $"{_dsn}/api/v1/users/{Uri.EscapeDataString(identifier)}" +
                   $"?linkedin_sections=%2A&account_id={Uri.EscapeDataString(_accountId)}";
 
-        // 
+        // creates get request and gets json response
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Accept.ParseAdd("application/json");
 
-        // 
+        // delay + sends request to read profile data
         await Task.Delay(150);
         using var resp = await _http.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();
 
-        // 
+        // return null if empty
         if (!resp.IsSuccessStatusCode)
             return new ProfileData(null, null, null, null);
 
-        // 
+        // parses json gets root element
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        // 
+        // gets first string from array
         string? FirstStringFromArray(JsonElement arr)
         {
             if (arr.ValueKind != JsonValueKind.Array) return null;
@@ -360,7 +361,7 @@ public class UnipileApi : IDisposable
         string? company = null;
         string? jobTitle = null;
 
-        // Extract contact info
+        // gets contact info
         if (root.TryGetProperty("contact_info", out var contact) &&
             contact.ValueKind == JsonValueKind.Object)
         {
@@ -370,7 +371,7 @@ public class UnipileApi : IDisposable
                 phone = FirstStringFromArray(phones);
         }
 
-        // Extract current company from experience
+        // gets current company from experience 
         if (root.TryGetProperty("experience", out var exp) &&
             exp.ValueKind == JsonValueKind.Array)
         {
@@ -414,7 +415,7 @@ public class UnipileApi : IDisposable
     // Helper Methods
     // ==================================================================
     
-    // 
+    // get username from profile url
     private static string? ExtractLinkedInPublicIdentifier(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return null;
@@ -432,7 +433,7 @@ public class UnipileApi : IDisposable
         }
     }
 
-    // 
+    // formats text for csv
     private static string CsvEscape(string? value)
     {
         value ??= "";
@@ -441,7 +442,7 @@ public class UnipileApi : IDisposable
         return needsQuotes ? $"\"{value}\"" : value;
     }
 
-    // 
+    // writes profile data to csv
     private static async Task ExportProfilesToCsvAsync(IEnumerable<LinkedInProfile> profiles, string filePath)
     {
         var sb = new System.Text.StringBuilder();
@@ -460,8 +461,10 @@ public class UnipileApi : IDisposable
         await File.WriteAllTextAsync(filePath, sb.ToString());
     }
 
+    // cleanup method 
     public void Dispose()
     {
+        _http?.Dispose();
     }
 
     // ==================================================================
